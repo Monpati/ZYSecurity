@@ -2,6 +2,7 @@ package utils
 
 import (
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"io"
@@ -9,6 +10,14 @@ import (
 	"strconv"
 	"time"
 )
+
+func HashSalt(str, salt string) (string, error) {
+	m := md5.New()
+	io.WriteString(m, str)
+	m.Sum(nil)
+	io.WriteString(m, salt)
+	return hex.EncodeToString(m.Sum(nil)), nil
+}
 
 // MD5哈希
 func Md5(data string) string {
@@ -18,6 +27,14 @@ func Md5(data string) string {
 	//data := []byte(d)
 	//has := md5.Sum(data)
 	//return fmt.Sprintf("%x", has)
+}
+
+func MD5(v interface{}) string {
+	a := v.(string)
+	d := []byte(a)
+	m := md5.New()
+	m.Write(d)
+	return hex.EncodeToString(m.Sum(nil))
 }
 
 // 获取随机数 纯文字

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"Dexun/config"
-	"Dexun/config/rest"
 	"Dexun/form"
 	"Dexun/model"
 	"fmt"
@@ -49,7 +48,6 @@ func Register(ctx *gin.Context) {
 }
 
 func AdminLogin(ctx *gin.Context) {
-	fmt.Println("aaaaa")
 	var reqAccount model.Account
 	if err := ctx.BindJSON(&reqAccount); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
@@ -61,7 +59,6 @@ func AdminLogin(ctx *gin.Context) {
 	fmt.Println(reqAccount.Password)
 	if err := reqAccount.AdminFindByAccountName(config.GetDB(), reqAccount.Username, reqAccount.Password); err == nil {
 		token, _ := config.ReleaseToken(reqAccount)
-		fmt.Println(token)
 		if err := config.StoreTokenInRedis(config.GetRedis(), token, reqAccount.Username); err != nil {
 			ctx.JSON(http.StatusOK, gin.H{
 				"code":    http.StatusBadRequest,
@@ -113,6 +110,7 @@ func Login(ctx *gin.Context) {
 				"data": gin.H{
 					"username": reqAccount.Username,
 					"password": reqAccount.Password,
+					"role":     reqAccount.Role,
 					"token":    token,
 				}})
 		}
@@ -127,6 +125,9 @@ func Login(ctx *gin.Context) {
 }
 
 func Logout(ctx *gin.Context) {
+	//if err := OperationLogAdd(ctx); err != nil {
+	//	return
+	//}
 	token := ctx.GetHeader("Authorization")
 	username := ctx.GetHeader("username")
 	if token != "" && username != "" {
@@ -159,6 +160,48 @@ func Logout(ctx *gin.Context) {
 	}
 }
 
+func GetAccountCertType(ctx *gin.Context) {
+	var account model.Account
+	username := ctx.GetHeader("username")
+	certType := account.GetCertType(config.GetDB(), username)
+	if err := account.UpdateCertType(config.GetDB(), username, certType); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":    0,
+			"message": err,
+		})
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":      0,
+			"cert_type": account.CertType,
+		})
+	}
+}
+
+func GetAccountRole(ctx *gin.Context) {
+	var reqAccount model.Account
+	var roleAccountName model.Role
+	username := ctx.GetHeader("Username")
+	if err := ctx.BindJSON(&roleAccountName); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": err,
+		})
+	}
+
+	if err := reqAccount.GetRole(config.GetDB(), username); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": err,
+		})
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code": 0,
+			"role": reqAccount.Role,
+		})
+	}
+
+}
+
 func Info(ctx *gin.Context) {
 	var usr model.Account
 
@@ -184,31 +227,40 @@ func Info(ctx *gin.Context) {
 	}
 }
 
+// offset是偏移量，即从第offset个开始查，limit表示查多少个
+// offset = pageIndex * pageSize，limit = pagesize
+// pageIndex是offset，pageSize是limit
 func AccountList(ctx *gin.Context) {
 	var usr model.Account
 	var reqPages form.AccountFilterForm
-	if usr.Role == "admin" {
-		if err := ctx.BindJSON(&reqPages); err != nil {
-			ctx.JSON(http.StatusOK, gin.H{
-				"code":  http.StatusBadRequest,
-				"error": err,
-			})
-		}
+	var originPage form.PageOrigin
+	//if usr.Role == "admin" {
 
-		if accounts, total, err := usr.GetByParams(rest.EngineCfg.MysqlDB, &reqPages); err != nil {
-			ctx.JSON(http.StatusOK, gin.H{
-				"code":  http.StatusBadRequest,
-				"error": err,
-			})
-		} else {
-			ctx.JSON(http.StatusOK, gin.H{
-				"code":  0,
-				"error": "",
-				"data": gin.H{
-					"accounts": accounts,
-					"total":    total,
-				},
-			})
-		}
+	if err := ctx.BindJSON(&originPage); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":  http.StatusBadRequest,
+			"error": "解析错误",
+		})
 	}
+	reqPages.Offset = originPage.PageSize * (originPage.PageIndex - 1)
+	reqPages.Limit = originPage.PageSize
+	//reqPages.Offset = tmp * tmp2
+	//reqPages.Limit = tmp2
+
+	if accounts, total, err := usr.GetByParams(config.GetDB(), &reqPages); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":  http.StatusBadRequest,
+			"error": err,
+		})
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":  0,
+			"error": "",
+			"data": gin.H{
+				"accounts": accounts,
+				"total":    total,
+			},
+		})
+	}
+	//}
 }
